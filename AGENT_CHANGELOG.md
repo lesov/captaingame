@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-10-10 - claude - main (merge)
+
+- Status: merged
+- Summary: User playtested the chasers/6-class roster expansion and the pause stats panel in-browser and confirmed "looks good, merge." Committed the previously-untracked prototype (`combat-model.js`, `test.htm`, `test/combat-model.test.js`, `AGENT_WORKFLOW_INSTRUCTIONS.md`, this changelog) to `feature/claude/ship-combat-prototype` as commit `36c5b07`, then merged that branch into `main` locally with `--no-ff` as commit `e715b13`, per explicit human approval (`AGENT_WORKFLOW_INSTRUCTIONS.md` requires this before any merge to `main`).
+- Files changed: none beyond the commit noted above — this is a merge-only entry.
+- Tests run: `node --test` on `main` post-merge — 8/8 passed.
+- UI review: approved-by-human. User confirmed both the ship roster/chasers work and the pause stats panel in a real browser.
+- Blockers or coordination notes: `main` is not pushed to `origin` — it is still exactly at `origin/main` (the merge only happened locally). Push on explicit request.
+
 ## 2026-10-10 - claude - feature/claude/ship-combat-prototype
 
 - Status: ready-for-review
