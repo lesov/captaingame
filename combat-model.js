@@ -57,12 +57,29 @@ function mountCount(C,i){return i<2?C.guns:i===2?(C.chaserBow||0):(C.chaserStern
    is the heeled-up (lee-opposite) side. */
 function gunsAvailCount(n,isBroadside,sideHeel){return isBroadside&&sideHeel<-5.5?Math.ceil(n/2):n}
 
+/* ---------- Hit-zone geometry ----------
+   al = along the target's length, ac = across her beam, z = shot height,
+   all relative to the target ship C. 'hull' is the footprint ellipse below
+   hull height -- a deterministic hit. 'rig' is a wider box above hull
+   height (up to the mast top) -- only a *chance* of a rigging hit, rolled
+   once per projectile by the caller (hitShip in test.htm), never per
+   physics substep, so the stated odds (e.g. 35% for round) are the actual
+   odds instead of compounding across every substep a descending ball
+   spends above hull height. */
+function classifyHit(C,al,ac,z){
+  if((al/(C.L/2))**2+(ac/(C.B/2))**2<1 && z<C.hh)return 'hull';
+  if(z>=C.hh && z<34 && Math.abs(al)<C.L*0.42 && Math.abs(ac)<C.B*0.95)return 'rig';
+  return null;
+}
+
 /* ---------- Damage-to-handling multipliers ----------
    The single source of truth for how hull/sail/crew damage degrades a ship:
    updateShip() in test.htm calls these for the live simulation, and the
    pause stats panel calls the same functions to display the effect, so the
    two can never drift apart. */
 function speedMultiplier(hullFrac){return 0.55+0.45*clamp(hullFrac,0,1)}
+// how much rigging damage alone throttles top speed, independent of the player's sail setting
+function riggingSpeedFactor(sailsFrac){return 0.3+0.7*clamp(sailsFrac,0,1)}
 function turnMultiplier(crew,sails){return (0.5+0.5*clamp(crew,0,1))*(0.6+0.4*clamp(sails,0,1))}
 function reloadMultiplier(crew){return 0.35+0.65*clamp(crew,0,1)}
 
@@ -72,17 +89,22 @@ function reloadMultiplier(crew){return 0.35+0.65*clamp(crew,0,1)}
    probability at the call site). dmgMult is the firing ship's relative gun
    caliber (CLASSES[x].dmg). Deliberately free of Math.random() so it's
    deterministic for tests; the one bit of original variance (round shot's
-   +/-30% hull roll) is applied by the caller. */
+   +/-30% hull roll) is applied by the caller.
+   DAMAGE_SCALE is a single knob for overall fight length/lethality — bump
+   it up if duels drag on, back down if ships die too fast. It scales every
+   ammo type and both zones uniformly, so relative ammo balance is untouched. */
+const DAMAGE_SCALE=2;
 function computeDamage(k,e,dmgMult,zone){
   dmgMult=dmgMult||1;
+  let d;
   if(zone==='rig'){
-    if(k==='chain')return{hull:0,crew:0,sails:0.035*e*dmgMult};
-    if(k==='round')return{hull:0,crew:0,sails:0.008*dmgMult};
-    return{hull:0,crew:0.004*dmgMult,sails:0.002*dmgMult}; // grape
-  }
-  if(k==='round')return{hull:2*e*dmgMult,crew:0.012*e*dmgMult,sails:0.004*dmgMult};
-  if(k==='chain')return{hull:0.5*e*dmgMult,crew:0.006*dmgMult,sails:0};
-  return{hull:0.12*e*dmgMult,crew:0.007*e*dmgMult,sails:0}; // grape
+    if(k==='chain')d={hull:0,crew:0,sails:0.035*e*dmgMult};
+    else if(k==='round')d={hull:0,crew:0,sails:0.008*dmgMult};
+    else d={hull:0,crew:0.004*dmgMult,sails:0.002*dmgMult}; // grape
+  } else if(k==='round')d={hull:2*e*dmgMult,crew:0.012*e*dmgMult,sails:0.004*dmgMult};
+  else if(k==='chain')d={hull:0.5*e*dmgMult,crew:0.006*dmgMult,sails:0};
+  else d={hull:0.12*e*dmgMult,crew:0.007*e*dmgMult,sails:0}; // grape
+  return{hull:d.hull*DAMAGE_SCALE,crew:d.crew*DAMAGE_SCALE,sails:d.sails*DAMAGE_SCALE};
 }
 
 /* ---------- Ship classes ---------- */
@@ -104,6 +126,6 @@ const CLASSES={
 
 if(typeof module!=='undefined'&&module.exports)
   module.exports={D2R,R2D,TAU,KN,TS,G,MUZ,wrap,adiff,clamp,rnd,gauss,compass,
-    NOGO,HELM_MARGIN,AMMO,CLASSES,RELOAD,SAILS,SAILF,BEARING,
-    polar,pointOfSail,sailable,rangeAt,elevFor,computeDamage,gunsAvailCount,mountCount,
-    speedMultiplier,turnMultiplier,reloadMultiplier};
+    NOGO,HELM_MARGIN,AMMO,CLASSES,RELOAD,SAILS,SAILF,BEARING,DAMAGE_SCALE,
+    polar,pointOfSail,sailable,rangeAt,elevFor,computeDamage,gunsAvailCount,mountCount,classifyHit,
+    speedMultiplier,riggingSpeedFactor,turnMultiplier,reloadMultiplier};

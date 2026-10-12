@@ -279,7 +279,7 @@ function launch(p){
   const base=effElev(s,p.i),bearing=BEARING[p.i];
   for(let j=0;j<a.n;j++){
     const e=(base+gauss()*0.35+(a.n>1?gauss()*a.spread*0.5:0))*D2R,az=s.h+bearing+gauss()*a.spread*0.5*D2R,v=a.v0*(1+gauss()*0.03),vh=v*Math.cos(e);
-    proj.push({x:mx,y:my,z:MUZ,vx:Math.sin(az)*vh+s.vx,vy:-Math.cos(az)*vh+s.vy,vz:v*Math.sin(e),k:p.k,a,owner:s,life:0,skips:0})}
+    proj.push({x:mx,y:my,z:MUZ,vx:Math.sin(az)*vh+s.vx,vy:-Math.cos(az)*vh+s.vy,vz:v*Math.sin(e),k:p.k,a,owner:s,life:0,skips:0,rigRolled:false})}
   const sg=p.i<2?sideSign(p.i):1;
   for(let j=0;j<2;j++)smoke.push({x:mx,y:my,vx:sx*sg*rnd(6,14)+gauss(),vy:sy*sg*rnd(6,14)+gauss(),r:rnd(3,5),a:0.55,life:0});
   bits.push({x:mx,y:my,vx:0,vy:0,life:0,max:0.12,flash:1});
@@ -335,7 +335,7 @@ function updateShip(s,dt){
   const sdt=dt*TS;
   if(!s.alive){s.sinkT+=dt;s.v*=1-dt*0.3;s.x+=s.vx*sdt*0.3;s.y+=s.vy*sdt*0.3;return}
   const off=adiff(wind.from,s.h),theta=Math.abs(off)*R2D;s.theta=theta;s.windSide=off>=0?1:-1;
-  const wms=wind.kn*KN,sailF=SAILF[s.sail]*(0.3+0.7*s.sails);
+  const wms=wind.kn*KN,sailF=SAILF[s.sail]*riggingSpeedFactor(s.sails);
   let target=wms*s.C.speedK*polar(theta)*sailF;
   if(theta<55&&sailF>0)target=-wms*0.07*sailF*(1-theta/55)-0.02;
   target*=speedMultiplier(s.hull/s.C.hull);
@@ -382,17 +382,18 @@ function hitShip(p){
   for(const s of ships){if(s===p.owner||!s.alive)continue;
     const dx=p.x-s.x,dy=p.y-s.y;if(dx*dx+dy*dy>900)continue;
     const fx=Math.sin(s.h),fy=-Math.cos(s.h),al=dx*fx+dy*fy,ac=dx*Math.cos(s.h)+dy*Math.sin(s.h);
+    const zone=classifyHit(s.C,al,ac,p.z);if(!zone)continue;
     const v=Math.hypot(p.vx,p.vy,p.vz),e=Math.min(1.3,(v/p.a.v0)**2+0.15),dmg=p.owner.C.dmg||1;
-    const hullIn=(al/(s.C.L/2))**2+(ac/(s.C.B/2))**2<1;
-    if(hullIn&&p.z<s.C.hh){
+    if(zone==='hull'){
       const d=computeDamage(p.k,e,dmg,'hull');if(p.k==='round')d.hull*=rnd(0.7,1.3);
       s.hull-=d.hull;s.crew-=d.crew;s.sails-=d.sails;
       splinter(p.x,p.y,6);s.hitFlash=1;return s}
-    if(p.z>=s.C.hh&&p.z<34&&Math.abs(al)<s.C.L*0.42&&Math.abs(ac)<s.C.B*0.95){
-      if(Math.random()<(p.k==='chain'?0.85:0.35)){
-        const d=computeDamage(p.k,e,dmg,'rig');
-        s.hull-=d.hull;s.crew-=d.crew;s.sails-=d.sails;
-        bits.push({x:p.x,y:p.y,vx:0,vy:0,life:0,max:0.35,rig:1});return s}}
+    if(p.rigRolled)continue; // one roll per shot -- a failed roll keeps falling, still eligible for a real hull hit
+    p.rigRolled=true;
+    if(Math.random()<(p.k==='chain'?0.85:0.35)){
+      const d=computeDamage(p.k,e,dmg,'rig');
+      s.hull-=d.hull;s.crew-=d.crew;s.sails-=d.sails;
+      bits.push({x:p.x,y:p.y,vx:0,vy:0,life:0,max:0.35,rig:1});return s}
   }
   return null;
 }
@@ -603,7 +604,7 @@ function pauseStats(){
   const enemy=ships.find(x=>x.team==='e');
   const rows=[player,enemy].filter(Boolean).map(s=>{
     const hullPct=Math.round(clamp(s.hull/s.C.hull,0,1)*100),sailPct=Math.round(clamp(s.sails,0,1)*100),crewPct=Math.round(clamp(s.crew,0,1)*100);
-    const spd=Math.round(speedMultiplier(s.hull/s.C.hull)*100),trn=Math.round(turnMultiplier(s.crew,s.sails)*100),rl=Math.round(reloadMultiplier(s.crew)*100);
+    const spd=Math.round(speedMultiplier(s.hull/s.C.hull)*riggingSpeedFactor(s.sails)*100),trn=Math.round(turnMultiplier(s.crew,s.sails)*100),rl=Math.round(reloadMultiplier(s.crew)*100);
     const guns=[0,1,2,3].filter(i=>mountCount(s.C,i)>0).map(i=>{
       const n=gunsAvail(s,i),max=mountCount(s.C,i);
       return MOUNT_LABELS[i]+' '+n+'/'+max+(n<max?' (awash)':'');

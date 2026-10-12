@@ -1,5 +1,14 @@
 # Agent Changelog
 
+## 2026-10-11 - claude - main
+
+- Status: ready-for-review
+- Summary: Fixed a bug the user noticed by playtesting — round shot almost always registered as a rigging hit, never a hull hit. Root cause: `hitShip(p)` is called from `updateProj()`'s physics loop on every substep (4 per frame) while a projectile is near a ship; the rig-zone branch's `Math.random()<0.35` (round) / `0.85` (chain) chance was independently re-rolled on *every* qualifying substep rather than once per shot. A ball typically spends several consecutive substeps with its height between hull-height and the mast-top cutoff while closing on/passing a ship, so the cumulative chance of an early false-positive rig hit was well over the nominal odds (e.g. ~88% with just 5 eligible substeps) — and it fired before the ball ever got the chance to descend into a real, deterministic hull hit. Also used the opportunity to answer the user's "how does the game decide what's damaged" question and, per the established pattern, extracted the geometry test into a pure `classifyHit(C,al,ac,z)` in `combat-model.js` so it's unit-testable and reusable, separate from the stateful roll-once-per-projectile logic which stays in `test.htm`.
+- Files changed: `combat-model.js` (new `classifyHit` function + export), `test.htm` (`launch()` tags new projectiles with `rigRolled:false`; `hitShip()` uses `classifyHit` and gates the probabilistic rig roll on `!p.rigRolled`, setting it after the first attempt regardless of outcome), `test/combat-model.test.js` (new `classifyHit` test: hull footprint at low z, rig box above hull height, miss outside both).
+- Tests run: `node --test` — 9/9 passed. Extended the headless `vm` smoke harness (not committed) with an empirical regression check: positioned the enemy point-blank and broadside-to-broadside, set quoin level (0°), fired 40 round-shot broadsides, and tallied outcomes — 15 scored a hull hit, 0 scored a rig-only hit (previously this scenario was dominated by spurious rig hits).
+- UI review: pending-human-test. Please fire round shot at close range with quoin near level and confirm hull damage now shows up normally instead of only rigging.
+- Blockers or coordination notes: None.
+
 ## 2026-10-10 - claude - main (merge)
 
 - Status: merged

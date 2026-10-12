@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   NOGO, HELM_MARGIN, AMMO, CLASSES, polar, pointOfSail, sailable,
-  rangeAt, elevFor, computeDamage, gunsAvailCount, mountCount, D2R,
-  speedMultiplier, turnMultiplier, reloadMultiplier,
+  rangeAt, elevFor, computeDamage, gunsAvailCount, mountCount, classifyHit, D2R,
+  speedMultiplier, riggingSpeedFactor, turnMultiplier, reloadMultiplier,
 } = require('../combat-model.js');
 
 test('polar: dead below NOGO, rises through close-hauled into broad reach, eases running', () => {
@@ -67,11 +67,17 @@ test('gunsAvailCount: heeled-away broadside halves, the opposite side and chaser
   assert.equal(gunsAvailCount(2, false, -20), 2);
 });
 
-test('speedMultiplier/turnMultiplier/reloadMultiplier: boundary values and monotonic in damage recovery', () => {
+test('speedMultiplier/riggingSpeedFactor/turnMultiplier/reloadMultiplier: boundary values and monotonic in damage recovery', () => {
   // these are the single source of truth for both updateShip() and the pause stats panel
   assert.equal(speedMultiplier(1), 1);
   assert.equal(speedMultiplier(0), 0.55);
   assert.ok(speedMultiplier(0.5) > speedMultiplier(0) && speedMultiplier(0.5) < speedMultiplier(1));
+
+  // rigging damage throttles top speed independent of hull damage -- the pause panel's
+  // "Top speed" must combine speedMultiplier(hull) * riggingSpeedFactor(sails), not hull alone
+  assert.equal(riggingSpeedFactor(1), 1);
+  assert.equal(riggingSpeedFactor(0), 0.3);
+  assert.ok(riggingSpeedFactor(0.16) < 0.5, 'a near-dismasted ship should be well under half speed from rigging alone');
 
   assert.equal(turnMultiplier(1, 1), 1);
   assert.equal(turnMultiplier(0, 0), 0.5 * 0.6);
@@ -85,6 +91,15 @@ test('speedMultiplier/turnMultiplier/reloadMultiplier: boundary values and monot
   // out-of-range inputs (e.g. a crew fraction that briefly overshoots due to float error) stay clamped
   assert.equal(speedMultiplier(-1), speedMultiplier(0));
   assert.equal(turnMultiplier(2, 2), turnMultiplier(1, 1));
+});
+
+test('classifyHit: hull footprint at low z, wider box above hull height is rig, otherwise a miss', () => {
+  const C = CLASSES.frigate; // L=38, B=10.5, hh=5.5
+  assert.equal(classifyHit(C, 0, 0, 2), 'hull', 'dead center, below hull height');
+  assert.equal(classifyHit(C, 0, 0, 10), 'rig', 'dead center, above hull height but under the mast-top cutoff');
+  assert.equal(classifyHit(C, 0, C.B * 0.8, 2), null, 'outside the hull ellipse at low z is a clean miss, not a rig hit');
+  assert.equal(classifyHit(C, 0, 0, 40), null, 'above the rig zone entirely (over the masts) is a miss');
+  assert.equal(classifyHit(C, C.L * 0.6, 0, 10), null, 'past the bow, outside the rig box lengthwise, is a miss');
 });
 
 test('CLASSES schema: every class has the fields the physics/combat code depends on', () => {
